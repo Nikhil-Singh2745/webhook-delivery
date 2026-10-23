@@ -47,8 +47,4 @@ bin/rails test            # Tests only
 bin/rails routes          # No application routes yet
 ```
 
-The initial tests cover PostgreSQL test-database isolation and an unknown JSON route through the Rails request stack. Test-environment boot rejects database names shared with development or production, even when configured on different hosts. These checks do not verify webhook behavior. Workers, a receiver demonstration, and API examples will be added with their respective implementation tasks.
-
-Verification in the restricted build environment: dependency, autoload, syntax, boot/request smoke, configuration isolation, and Git ignore checks passed. PostgreSQL socket access was blocked, so database preparation and the test suite could not complete. Run `bin/setup` followed by `bin/check` with local PostgreSQL before treating the foundation as verified.
-
-The project `.gitignore` excludes secrets, runtime artifacts, installed dependencies, editor files, and local agent planning documents, including `PLAN.md` and `API_CONTRACT.md`. `README.md`, `NOTES.md`, `Gemfile.lock`, and database schema files remain trackable. Ignore rules do not remove files already tracked by Git. Repository initialization, publishing, and deployment are separate actions.
+The initial tests cover PostgreSQL test-database isolation and an unknown JSON route through the Rails request stack. Test-environment boot rejects database names shared with development or production, even when configured on different hosts. These checks do not verify webhook behavior.
