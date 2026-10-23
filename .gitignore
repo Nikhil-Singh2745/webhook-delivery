@@ -1,0 +1,45 @@
+# Local agent instructions and planning documents; keep README.md and NOTES.md.
+AGENTS.md
+agents.md
+persona.md
+PROJECT_IDEAS.md
+PLAN.md
+API_CONTRACT.md
+.agents/
+.codex/
+.aws/
+
+# Credentials and local configuration.
+.env
+.env.*
+!.env.example
+!.env.*.example
+*.key
+/config/credentials.yml.enc
+/.bundle/
+
+# Dependencies, runtime data, and reports.
+/vendor/bundle/
+/log/*
+!/log/.keep
+/tmp/*
+!/tmp/.keep
+/storage/*
+!/storage/.keep
+/coverage/
+/db/*.sqlite3*
+/db/*.sql
+*.dump
+
+# Editor and operating-system artifacts.
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*~
+
+# Ignore key files for decrypting credentials and more.
+/config/*.key
+

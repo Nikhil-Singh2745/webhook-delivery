@@ -1,0 +1,12 @@
+#!/usr/bin/env ruby
+
+APP_ROOT = File.expand_path("..", __dir__)
+
+Dir.chdir(APP_ROOT) do
+  system("bundle", "install", exception: true) unless system("bundle", "check")
+
+  %w[development test].each do |environment|
+    puts "Preparing #{environment} database..."
+    system({"RAILS_ENV" => environment, "SKIP_TEST_DATABASE" => "1"}, "bin/rails", "db:prepare", exception: true)
+  end
+end

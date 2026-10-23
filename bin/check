@@ -1,0 +1,9 @@
+#!/usr/bin/env ruby
+
+APP_ROOT = File.expand_path("..", __dir__)
+
+Dir.chdir(APP_ROOT) do
+  system("bundle", "check", exception: true)
+  system({"RAILS_ENV" => "test"}, "bin/rails", "zeitwerk:check", exception: true)
+  system({"RAILS_ENV" => "test"}, "bin/rails", "test", exception: true)
+end
