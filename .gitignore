@@ -29,6 +29,7 @@ API_CONTRACT.md
 /coverage/
 /db/*.sqlite3*
 /db/*.sql
+!/db/structure.sql
 *.dump
 
 # Editor and operating-system artifacts.

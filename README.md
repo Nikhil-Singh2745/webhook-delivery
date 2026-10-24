@@ -1,6 +1,6 @@
 # Reliable webhook delivery
 
-A Rails API foundation for a local outbound webhook service. The current application provides PostgreSQL configuration, application boot, and initial checks. Endpoint registration, authentication, ingestion, delivery workers, and replay are not implemented yet; there are no application API routes or delivery guarantees at this stage.
+A Rails API foundation for a local outbound webhook service. The application defines tenants, credential digests, endpoints, immutable events, deliveries, and attempts, with PostgreSQL constraints for their relationships and identities. Endpoint registration, authentication, ingestion, delivery workers, and replay are not implemented yet; there are no application API routes or delivery guarantees at this stage.
 
 ## Local setup
 
@@ -27,7 +27,7 @@ bin/check
 bin/rails server --binding 127.0.0.1
 ```
 
-`bin/setup` installs the locked dependencies and prepares `webhook_delivery_development` and `webhook_delivery_test`. It can be repeated without dropping either database and does not start a server. Dependency installation requires internet access on the first run; application checks use only local PostgreSQL.
+`bin/setup` installs the locked dependencies and prepares `webhook_delivery_development` and `webhook_delivery_test`, applying pending migrations. It can be repeated without dropping either database and does not start a server. Dependency installation requires internet access on the first run; application checks use only local PostgreSQL. Keep PostgreSQL's `pg_dump` and `psql` client tools installed: schema preparation uses `db/structure.sql` to preserve database triggers.
 
 For a different local connection, export `DEVELOPMENT_DATABASE_URL` and `TEST_DATABASE_URL` before setup. They must name separate databases. `.env.example` documents the defaults; `.env` files are not automatically loaded. To use one, copy the example to `.env` and load it into the shell:
 
@@ -47,4 +47,4 @@ bin/rails test            # Tests only
 bin/rails routes          # No application routes yet
 ```
 
-The initial tests cover PostgreSQL test-database isolation and an unknown JSON route through the Rails request stack. Test-environment boot rejects database names shared with development or production, even when configured on different hosts. These checks do not verify webhook behavior.
+Tests cover PostgreSQL test-database isolation, record associations, uniqueness, foreign keys, cross-tenant delivery links, immutable events, delivery counters and schedules, attempt identities and outcomes, and an unknown JSON route through the Rails request stack. Constraint tests bypass model validations. Test-environment boot rejects database names shared with development or production, even when configured on different hosts. These checks do not verify webhook behavior or worker concurrency.
