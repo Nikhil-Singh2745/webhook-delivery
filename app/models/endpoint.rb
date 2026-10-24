@@ -5,4 +5,8 @@ class Endpoint < ApplicationRecord
   attr_readonly :tenant_id, :url, :signing_secret_ciphertext
 
   validates :url, :signing_secret_ciphertext, presence: true
+
+  def signing_secret
+    EndpointSecret.decrypt(signing_secret_ciphertext, endpoint_id: id)
+  end
 end

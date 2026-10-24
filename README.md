@@ -1,6 +1,6 @@
 # Reliable webhook delivery
 
-A Rails API foundation for a local outbound webhook service. The application defines tenants, credential digests, endpoints, immutable events, deliveries, and attempts, with PostgreSQL constraints for their relationships and identities. Local credential issuance, revocation, and a shared authenticated controller with tenant-scoped lookups are implemented. Endpoint registration, inspection, ingestion, delivery workers, and replay remain unimplemented; there are no application API routes or delivery guarantees yet.
+A Rails API for the endpoint-management foundation of a local outbound webhook service. It supports local API credentials, tenant-scoped endpoint registration and inspection, encrypted signing secrets, and permanent endpoint disabling. PostgreSQL records and constraints also define immutable events, deliveries, and attempts. Event ingestion, delivery workers, and replay remain unimplemented; registration does not send any HTTP requests.
 
 ## Local setup
 
@@ -27,7 +27,9 @@ bin/check
 bin/rails server --binding 127.0.0.1
 ```
 
-`bin/setup` installs the locked dependencies and prepares `webhook_delivery_development` and `webhook_delivery_test`, applying pending migrations. It can be repeated without dropping either database and does not start a server. Dependency installation requires internet access on the first run; application checks use only local PostgreSQL. Keep PostgreSQL's `pg_dump` and `psql` client tools installed: schema preparation uses `db/structure.sql` to preserve database triggers.
+`bin/setup` installs the locked dependencies, creates a local endpoint-encryption key if needed, and prepares `webhook_delivery_development` and `webhook_delivery_test`, applying pending migrations. It preserves existing keys and databases and does not start a server. Dependency installation requires internet access on the first run; application checks use only local PostgreSQL. Keep PostgreSQL's `pg_dump` and `psql` client tools installed: schema preparation uses `db/structure.sql` to preserve database triggers.
+
+Signing secrets use a separate encryption key in ignored `config/endpoint_encryption.key`, created with owner-only permissions. Back it up securely alongside the database: losing or replacing it makes existing signing secrets unreadable. `ENDPOINT_ENCRYPTION_KEY` can override this file with exactly 64 lowercase hexadecimal characters. Existing installations can prepare the key with `bin/rails endpoints:prepare_key`; it never prints the key. Tests use a separate fixed test key.
 
 For a different local connection, export `DEVELOPMENT_DATABASE_URL` and `TEST_DATABASE_URL` before setup. They must name separate databases. `.env.example` documents the defaults; `.env` files are not automatically loaded. To use one, copy the example to `.env` and load it into the shell:
 
@@ -56,14 +58,47 @@ CREDENTIAL_ID="<credential UUID>" bin/rails credentials:revoke
 
 Issuance commits the tenant and credential together before printing. Supplying both tenant selectors is rejected. Revocation is permanent and repeatable; it takes effect on subsequent authentication checks. It does not cancel a request already authenticated. These are local administrative commands with database access, not HTTP management routes. A lost credential must be replaced and its old credential ID revoked.
 
-API controllers inherit bearer authentication from `V1::BaseController`. Credentials use `Authorization: Bearer <credential>`; missing, invalid, and revoked credentials receive the same JSON `401` and `WWW-Authenticate: Bearer`. The shared resource lookups resolve through the authenticated tenant and return JSON `404` for unknown or other-tenant records. Protected responses use `Cache-Control: no-store`. Resource routes will be added with their behavior; no HTTP credential demo is available yet.
+Credentials use `Authorization: Bearer <credential>`; missing, invalid, and revoked credentials receive the same JSON `401` and `WWW-Authenticate: Bearer`. Resource lookups resolve through the authenticated tenant and return JSON `404` for unknown or other-tenant records. Protected responses use `Cache-Control: no-store`.
+
+## Endpoints
+
+With the server running, set `API_CREDENTIAL` to the issued credential in your shell, then register an endpoint:
+
+```sh
+curl --request POST http://127.0.0.1:3000/v1/endpoints \
+  --header "Authorization: Bearer $API_CREDENTIAL" \
+  --header 'Content-Type: application/json' \
+  --data '{"url":"https://example.com/webhooks"}'
+```
+
+The `201` response contains `data` with `id`, `url`, `status`, `created_at`, `disabled_at`, and `signing_secret`. Save the secret securely: it is returned only at creation. Each registration creates a separate endpoint and secret, including repeated registrations of the same URL. A URL or secret cannot be changed; register a replacement instead.
+
+Only HTTPS on port 443 is accepted. Credentials in URLs, query strings, fragments, non-public IP addresses, and DNS names resolving to any non-public address are rejected with `422`. Registration needs working DNS for hostnames. It preserves the exact URL and path; it does not contact the receiver or prove that it accepts webhooks. Private and loopback receivers have no exception yet.
+
+Set `ENDPOINT_ID` to the returned UUID to inspect or disable it:
+
+```sh
+curl "http://127.0.0.1:3000/v1/endpoints?limit=20" \
+  --header "Authorization: Bearer $API_CREDENTIAL"
+curl "http://127.0.0.1:3000/v1/endpoints/$ENDPOINT_ID" \
+  --header "Authorization: Bearer $API_CREDENTIAL"
+curl --request POST "http://127.0.0.1:3000/v1/endpoints/$ENDPOINT_ID/disable" \
+  --header "Authorization: Bearer $API_CREDENTIAL" \
+  --header 'Content-Type: application/json' --data '{}'
+```
+
+Inspection and disable responses omit signing secrets. Lists include disabled endpoints, ordered by creation time and UUID descending. `limit` defaults to 20 and cannot exceed 100; pass the returned `next_cursor` as the next request's `cursor` query parameter. Cursors are bound to the tenant and endpoint list; pagination is not a snapshot.
+
+Disabling is permanent and repeatable. It cancels queued `pending` and `retry_wait` deliveries in the same transaction while preserving attempt history and already-running deliveries. The delivery contract allows an already-claimed request to finish after disabling; its eventual worker behavior is not implemented yet. No enable, update, or delete route exists.
+
+Requests use JSON objects, reject unknown fields and duplicate keys, and allow at most 65,536 body bytes and 20 nested containers. Compressed bodies and unsupported media types are rejected. Errors contain `error` (`code`, `message`, and `details`) and `request_id`.
 
 ## Checks and scope
 
 ```sh
 bin/check                 # Test-environment autoload check and tests
 bin/rails test            # Tests only
-bin/rails routes          # No application routes yet
+bin/rails routes          # Endpoint registration, list, inspection, and disabling
 ```
 
-Tests cover PostgreSQL test-database isolation, record associations, uniqueness, foreign keys, cross-tenant delivery links, immutable events, delivery counters and schedules, and attempt identities and outcomes. Credential tests cover issuance, revocation, digest storage, and parameter filtering. Test-only routes exercise the shared controller through the Rails request stack, including authentication failures, nested lookups, tenant-scoped reads and writes, and identity isolation between requests. They do not expose unfinished resource APIs. Constraint tests bypass model validations. Test-environment boot rejects database names shared with development or production, even when configured on different hosts. These checks do not verify webhook behavior or worker concurrency.
+Tests cover PostgreSQL isolation and constraints, immutable events, credentials, tenant boundaries, endpoint APIs, secret encryption, URL/DNS policy, body parsing, pagination, cancellation rollback, and competing endpoint transactions. Network-bound tests use controlled DNS results and public IP literals without contacting receivers. Additional temporary routes test shared authentication and nested ownership. Test-environment boot rejects database names shared with development or production. Worker claims, outbound connections, retries, and replay are not implemented or verified.

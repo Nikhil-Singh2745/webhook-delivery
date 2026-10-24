@@ -1,5 +1,7 @@
 module V1
   class BaseController < ApplicationController
+    wrap_parameters false
+
     before_action :authenticate_credential
 
     rescue_from ActiveRecord::RecordNotFound, with: :resource_not_found
@@ -37,9 +39,9 @@ module V1
       render_error(:not_found, "not_found", "Resource not found.")
     end
 
-    def render_error(status, code, message)
+    def render_error(status, code, message, details: {})
       render json: {
-        error: {code: code, message: message, details: {}},
+        error: {code: code, message: message, details: details},
         request_id: request.request_id
       }, status: status
     end

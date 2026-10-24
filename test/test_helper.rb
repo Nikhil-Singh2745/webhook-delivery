@@ -1,4 +1,5 @@
 ENV["RAILS_ENV"] = "test"
+ENV["ENDPOINT_ENCRYPTION_KEY"] = "a" * 64
 
 require_relative "../config/environment"
 require "rails/test_help"

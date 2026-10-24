@@ -32,7 +32,11 @@ module RecordHelpers
   end
 
   def create_delivery(tenant:, event:, endpoint:, **attributes)
-    Delivery.create!({tenant: tenant, event: event, endpoint: endpoint}.merge(attributes))
+    delivery = Delivery.new({tenant: tenant, event: event, endpoint: endpoint}.merge(attributes))
+    # Rails omits unchanged nils for SQL defaults; explicit test schedules must override CURRENT_TIMESTAMP.
+    delivery.next_attempt_at_will_change! if attributes.key?(:next_attempt_at)
+    delivery.save!
+    delivery
   end
 
   def create_attempt(delivery:, **attributes)

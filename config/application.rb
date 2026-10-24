@@ -1,4 +1,5 @@
 require_relative "boot"
+require_relative "../lib/api_request_body"
 
 require "rails"
 require "active_model/railtie"
@@ -15,5 +16,6 @@ module WebhookDelivery
     config.autoload_lib(ignore: %w[assets tasks])
     config.api_only = true
     config.active_record.schema_format = :sql
+    config.middleware.insert_before Rails::Rack::Logger, ApiRequestBody
   end
 end
