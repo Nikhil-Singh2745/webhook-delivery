@@ -1,6 +1,6 @@
 # Reliable webhook delivery
 
-A Rails API foundation for a local outbound webhook service. The application defines tenants, credential digests, endpoints, immutable events, deliveries, and attempts, with PostgreSQL constraints for their relationships and identities. Endpoint registration, authentication, ingestion, delivery workers, and replay are not implemented yet; there are no application API routes or delivery guarantees at this stage.
+A Rails API foundation for a local outbound webhook service. The application defines tenants, credential digests, endpoints, immutable events, deliveries, and attempts, with PostgreSQL constraints for their relationships and identities. Local credential issuance, revocation, and a shared authenticated controller with tenant-scoped lookups are implemented. Endpoint registration, inspection, ingestion, delivery workers, and replay remain unimplemented; there are no application API routes or delivery guarantees yet.
 
 ## Local setup
 
@@ -39,6 +39,25 @@ set +a
 
 Keep passwords in an ignored local file or PostgreSQL's password file. Local development and test configuration explicitly select their own URLs so a generic `DATABASE_URL` cannot silently point both environments at the same database. Standard PostgreSQL variables such as `PGHOST`, `PGPORT`, and `PGUSER` can supply connection defaults.
 
+## Local credentials
+
+Create a tenant and issue its first credential:
+
+```sh
+TENANT_NAME="Local demo" bin/rails credentials:issue
+```
+
+The command prints one JSON object containing `tenant_id`, `credential_id`, and `credential`. Save the credential securely: this is its only display, and only its SHA-256 digest is stored. Each `TENANT_NAME` invocation creates a new tenant, even if the name already exists. To issue another credential for an existing tenant, use its returned UUID:
+
+```sh
+TENANT_ID="<tenant UUID>" bin/rails credentials:issue
+CREDENTIAL_ID="<credential UUID>" bin/rails credentials:revoke
+```
+
+Issuance commits the tenant and credential together before printing. Supplying both tenant selectors is rejected. Revocation is permanent and repeatable; it takes effect on subsequent authentication checks. It does not cancel a request already authenticated. These are local administrative commands with database access, not HTTP management routes. A lost credential must be replaced and its old credential ID revoked.
+
+API controllers inherit bearer authentication from `V1::BaseController`. Credentials use `Authorization: Bearer <credential>`; missing, invalid, and revoked credentials receive the same JSON `401` and `WWW-Authenticate: Bearer`. The shared resource lookups resolve through the authenticated tenant and return JSON `404` for unknown or other-tenant records. Protected responses use `Cache-Control: no-store`. Resource routes will be added with their behavior; no HTTP credential demo is available yet.
+
 ## Checks and scope
 
 ```sh
@@ -47,4 +66,4 @@ bin/rails test            # Tests only
 bin/rails routes          # No application routes yet
 ```
 
-Tests cover PostgreSQL test-database isolation, record associations, uniqueness, foreign keys, cross-tenant delivery links, immutable events, delivery counters and schedules, attempt identities and outcomes, and an unknown JSON route through the Rails request stack. Constraint tests bypass model validations. Test-environment boot rejects database names shared with development or production, even when configured on different hosts. These checks do not verify webhook behavior or worker concurrency.
+Tests cover PostgreSQL test-database isolation, record associations, uniqueness, foreign keys, cross-tenant delivery links, immutable events, delivery counters and schedules, and attempt identities and outcomes. Credential tests cover issuance, revocation, digest storage, and parameter filtering. Test-only routes exercise the shared controller through the Rails request stack, including authentication failures, nested lookups, tenant-scoped reads and writes, and identity isolation between requests. They do not expose unfinished resource APIs. Constraint tests bypass model validations. Test-environment boot rejects database names shared with development or production, even when configured on different hosts. These checks do not verify webhook behavior or worker concurrency.
