@@ -1,16 +1,8 @@
-require "json"
+require_relative "api_json_body"
 require "stringio"
 
 class ApiRequestBody
-  LIMIT = 65_536
-  class DuplicateKey < StandardError; end
-
-  class UniqueObject < Hash
-    def []=(key, value)
-      raise DuplicateKey if key?(key)
-      super
-    end
-  end
+  LIMIT = ApiJsonBody::LIMIT
 
   def initialize(app)
     @app = app
@@ -30,17 +22,11 @@ class ApiRequestBody
       unless env["CONTENT_TYPE"].to_s.match?(/\Aapplication\/json(?:\s*;\s*charset\s*=\s*(?:utf-8|"utf-8"))?\z/i)
         return error(env, 415, "unsupported_media_type", "Use application/json with UTF-8 encoding.")
       end
-      body = body.dup.force_encoding(Encoding::UTF_8)
-      return error(env, 400, "invalid_json", "Invalid JSON body.") unless body.valid_encoding?
-
       begin
-        parsed = JSON.parse(body, object_class: UniqueObject, max_nesting: 20, create_additions: false)
-      rescue JSON::NestingError
-        return error(env, 422, "validation_failed", "Request nesting exceeds the limit.")
-      rescue JSON::ParserError, DuplicateKey
-        return error(env, 400, "invalid_json", "Invalid JSON body.")
+        parsed = ApiJsonBody.parse(body)
+      rescue ApiJsonBody::Invalid => exception
+        return error(env, exception.status, exception.code, exception.message)
       end
-      return error(env, 400, "invalid_request", "Request body must be an object.") unless parsed.is_a?(Hash)
 
       env["action_dispatch.request.request_parameters"] = parsed
     end

@@ -1,6 +1,6 @@
 # Reliable webhook delivery
 
-A Rails API for the endpoint-management foundation of a local outbound webhook service. It supports local API credentials, tenant-scoped endpoint registration and inspection, encrypted signing secrets, and permanent endpoint disabling. PostgreSQL records and constraints also define immutable events, deliveries, and attempts. Event ingestion, delivery workers, and replay remain unimplemented; registration does not send any HTTP requests.
+A Rails API for the endpoint-management foundation of a local outbound webhook service. It supports local API credentials, tenant-scoped endpoint registration and inspection, encrypted signing secrets, and permanent endpoint disabling. An internal event-ingestion service validates requests and deduplicates events by tenant and exact request bytes. Public event ingestion awaits transactional delivery creation; delivery workers and replay remain unimplemented. Registration does not send any HTTP requests.
 
 ## Local setup
 
@@ -101,4 +101,4 @@ bin/rails test            # Tests only
 bin/rails routes          # Endpoint registration, list, inspection, and disabling
 ```
 
-Tests cover PostgreSQL isolation and constraints, immutable events, credentials, tenant boundaries, endpoint APIs, secret encryption, URL/DNS policy, body parsing, pagination, cancellation rollback, and competing endpoint transactions. Network-bound tests use controlled DNS results and public IP literals without contacting receivers. Additional temporary routes test shared authentication and nested ownership. Test-environment boot rejects database names shared with development or production. Worker claims, outbound connections, retries, and replay are not implemented or verified.
+Tests cover PostgreSQL isolation and constraints, immutable events, credentials, tenant boundaries, endpoint APIs, secret encryption, URL/DNS policy, body parsing, pagination, cancellation rollback, competing endpoint transactions, and event idempotency including concurrent duplicates and conflicts. Ingestion concurrency tests use isolated PostgreSQL schemas to permit real commits without deleting immutable history. Network-bound tests use controlled DNS results and public IP literals without contacting receivers. Additional temporary routes test shared authentication and nested ownership. Test-environment boot rejects database names shared with development or production. Public event ingestion, worker claims, outbound connections, retries, and replay are not implemented or verified.
