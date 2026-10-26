@@ -1,6 +1,6 @@
 # Reliable webhook delivery
 
-A Rails API for the endpoint-management foundation of a local outbound webhook service. It supports local API credentials, tenant-scoped endpoint registration and inspection, encrypted signing secrets, and permanent endpoint disabling. An internal event-ingestion service validates requests and deduplicates events by tenant and exact request bytes. Public event ingestion awaits transactional delivery creation; delivery workers and replay remain unimplemented. Registration does not send any HTTP requests.
+A local Rails API that accepts events and creates durable outbound webhook work. It supports API credentials, tenant-scoped endpoint management, encrypted signing secrets, and idempotent event ingestion. Each new event and its pending deliveries commit together. Delivery workers and replay remain unimplemented; accepting an event does not contact receivers.
 
 ## Local setup
 
@@ -93,12 +93,32 @@ Disabling is permanent and repeatable. It cancels queued `pending` and `retry_wa
 
 Requests use JSON objects, reject unknown fields and duplicate keys, and allow at most 65,536 body bytes and 20 nested containers. Compressed bodies and unsupported media types are rejected. Errors contain `error` (`code`, `message`, and `details`) and `request_id`.
 
+## Events
+
+Submit an event with a tenant-scoped idempotency key:
+
+```sh
+curl --request POST http://127.0.0.1:3000/v1/events \
+  --header "Authorization: Bearer $API_CREDENTIAL" \
+  --header 'Content-Type: application/json' \
+  --header 'Idempotency-Key: demo_invoice_1' \
+  --data '{"type":"invoice.created","data":{"invoice_id":"demo_invoice_1","amount_minor":2500}}'
+```
+
+A new request returns `201` with `data` containing `id`, `type`, `data`, `created_at`, and `delivery_count`. The event and one immediately eligible `pending` delivery per active tenant endpoint commit in one PostgreSQL transaction before success is returned. No external queue or receiver request is involved. Acceptance guarantees local durable work subject to database durability; it does not guarantee receipt.
+
+Retry with the same key and exact body bytes to receive the original event with `200` and `Idempotency-Replayed: true`. Changed valid bytes return `409 idempotency_conflict`, including whitespace or field-order changes. Keys are case-sensitive, 1–128 ASCII letters, digits, `.`, `_`, `:`, or `-`, and have no automatic expiry. Validation failures do not reserve a key. If a connection fails after submission, retry with the original key and bytes to resolve the unknown outcome.
+
+`type` must match `[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)*` and contain at most 100 ASCII characters. `data` must be an object; PostgreSQL-incompatible NUL strings and non-finite numbers are rejected. Client identifiers, timestamps, endpoint lists, and query parameters are rejected.
+
+The endpoint snapshot is ordered with registration and disable by a tenant lock. Earlier committed registration is included; later registration never backfills old events. Earlier disable excludes an endpoint; later disable cancels its queued delivery. Zero active endpoints is valid. Matching retries take no new snapshot, and `delivery_count` always retains the original count, including subsequently canceled work. Event inspection routes and delivery processing are not available yet.
+
 ## Checks and scope
 
 ```sh
 bin/check                 # Test-environment autoload check and tests
 bin/rails test            # Tests only
-bin/rails routes          # Endpoint registration, list, inspection, and disabling
+bin/rails routes          # Implemented endpoint routes and event acceptance
 ```
 
-Tests cover PostgreSQL isolation and constraints, immutable events, credentials, tenant boundaries, endpoint APIs, secret encryption, URL/DNS policy, body parsing, pagination, cancellation rollback, competing endpoint transactions, and event idempotency including concurrent duplicates and conflicts. Ingestion concurrency tests use isolated PostgreSQL schemas to permit real commits without deleting immutable history. Network-bound tests use controlled DNS results and public IP literals without contacting receivers. Additional temporary routes test shared authentication and nested ownership. Test-environment boot rejects database names shared with development or production. Public event ingestion, worker claims, outbound connections, retries, and replay are not implemented or verified.
+Tests cover PostgreSQL isolation and constraints, immutable events, credentials, tenant boundaries, endpoint APIs, secret encryption, URL/DNS policy, body parsing, pagination, cancellation rollback, competing endpoint transactions, and event acceptance including concurrent duplicates and conflicts, atomic fan-out rollback across insert batches, endpoint-snapshot races, and recovery after a lost response. Ingestion concurrency tests use isolated PostgreSQL schemas to permit real commits without deleting immutable history. Network-bound tests use controlled DNS results and public IP literals without contacting receivers. Additional temporary routes test shared authentication and nested ownership. Test-environment boot rejects database names shared with development or production. Worker claims, outbound connections, retries, replay, and event/delivery inspection are not implemented.

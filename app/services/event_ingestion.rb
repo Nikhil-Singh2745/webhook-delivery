@@ -17,7 +17,14 @@ class EventIngestion
         raise Conflict unless existing.request_fingerprint == submission.request_fingerprint
         Result.new(event: existing, replayed: true)
       else
-        event = tenant.events.create!(submission.event_attributes.merge(delivery_count: 0))
+        endpoint_ids = tenant.endpoints.where(status: "active").order(:id).pluck(:id)
+        event = tenant.events.create!(submission.event_attributes.merge(delivery_count: endpoint_ids.size))
+        endpoint_ids.each_slice(500) do |batch|
+          Delivery.insert_all!(batch.map do |endpoint_id|
+            {tenant_id: tenant.id, event_id: event.id, endpoint_id: endpoint_id,
+             next_attempt_at: event.created_at, created_at: event.created_at, updated_at: event.created_at}
+          end)
+        end
         Result.new(event: event, replayed: false)
       end
     end

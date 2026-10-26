@@ -1,4 +1,4 @@
 Rails.application.config.filter_parameters += [
   :passw, :email, :secret, :token, :_key, :crypt, :salt, :certificate, :otp, :ssn, :cvv, :cvc,
-  :authorization, :credential
+  :authorization, :credential, :data, :outbound_body
 ]
